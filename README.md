@@ -148,6 +148,7 @@ for chunk in stream_generate(
     speaker=0,
     context=[],
     max_audio_length_ms=5000,
+    accumulation_size=1, # Accumulate codebooks and decode at once (increasing = better speed/stability, more initial delay)
     sampler=make_sampler(temp=0.8, top_k=50),
 ):
     # Process each chunk as it's generated
