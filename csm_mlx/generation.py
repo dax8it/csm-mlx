@@ -168,6 +168,7 @@ def stream_generate(
     speaker: int,
     context: list[Segment],
     max_audio_length_ms: float = 90_000,
+    accumulation_size=1,
     *,
     sampler: Optional[Callable[..., mx.array]] = None,
     logits_processors: Optional[List[Callable[[mx.array, mx.array], mx.array]]] = None,
@@ -207,6 +208,7 @@ def stream_generate(
     audio_tokenizer = get_audio_tokenizer(n_audio_codebooks=model.n_audio_codebooks)
     audio_tokenizer.reset_state()
 
+    accumulated = []
     for _ in range(max_audio_frames):
         sample = generate_frame(
             model,
@@ -229,11 +231,23 @@ def stream_generate(
             mx.concat([mx.ones_like(sample), mx.zeros((1, 1))], axis=1), 1
         )
 
+        accumulated.append(sample)
+
+        if len(accumulated) >= accumulation_size:
+            with mx.stream(stream):
+                yield (
+                    audio_tokenizer.decode_step(
+                        mx.stack(accumulated).transpose(1, 2, 0)
+                    )
+                    .squeeze(0)
+                    .squeeze(0)
+                )
+            accumulated = []
+
+    if accumulated:
         with mx.stream(stream):
             yield (
-                audio_tokenizer.decode_step(
-                    mx.expand_dims(sample, 0).transpose(1, 2, 0)
-                )
+                audio_tokenizer.decode_step(mx.stack(accumulated).transpose(1, 2, 0))
                 .squeeze(0)
                 .squeeze(0)
             )
